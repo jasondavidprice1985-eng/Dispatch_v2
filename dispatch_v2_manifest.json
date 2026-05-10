@@ -1,0 +1,36 @@
+{
+  "name": "Dispatch — Omega Contracts",
+  "short_name": "Dispatch",
+  "description": "Delivery schedule management for Omega Contracts installation managers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080d1a",
+  "theme_color": "#080d1a",
+  "lang": "en-GB",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Today's Deliveries",
+      "short_name": "Today",
+      "description": "Jump to today's delivery schedule",
+      "url": "/?view=today",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
