@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080d1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dispatch">
+<title>Dispatch</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     WHO ARE YOU — full screen overlay, first open only
+     Hidden by default — app.js shows it when needsCMPicker() is true
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="who-overlay" class="who-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="who-title">
+  <div class="who-inner">
+    <div class="who-logo">D<span>.</span></div>
+    <div class="who-title" id="who-title">Who are you?</div>
+    <div class="who-sub">Your deliveries will load automatically next time.</div>
+    <div class="who-list" id="who-list">
+      <!-- Populated by bootstrap script from getPickerCMs() -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     LOAD OVERLAY — shown while parsing, hidden when ready
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="load-overlay" class="load-overlay" hidden aria-live="polite">
+  <div class="load-inner">
+    <div class="load-spinner" aria-hidden="true"></div>
+    <div class="load-text" id="load-text">Loading report…</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ERROR BANNER — shown on load failure, dismissed on tap
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="error-banner" class="error-banner" hidden role="alert">
+  <span class="error-icon" aria-hidden="true">⚠</span>
+  <span id="error-text" class="error-text"></span>
+  <button class="error-dismiss" id="error-dismiss" aria-label="Dismiss">✕</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     QUALITY NOTICE — shown when parser skips rows
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="quality-banner" class="quality-banner" hidden role="status">
+  <span class="quality-icon" aria-hidden="true">ℹ</span>
+  <span id="quality-text" class="quality-text"></span>
+  <button class="quality-dismiss" id="quality-dismiss" aria-label="Dismiss">✕</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     APP SHELL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="app" class="app">
+
+  <!-- ── Toolbar ── -->
+  <header class="toolbar" role="banner">
+    <div class="toolbar-logo" aria-label="Dispatch">D<span>.</span></div>
+    <div class="toolbar-file" id="toolbar-file" aria-live="polite">
+      <!-- Filename appears after load -->
+    </div>
+    <button class="toolbar-cm-btn" id="toolbar-cm-btn"
+            aria-label="Change who you are"
+            title="Tap to change your name">
+      <!-- CM name appears after selection -->
+    </button>
+  </header>
+
+  <!-- ── Filter chips ── -->
+  <nav class="filter-bar" aria-label="Delivery filters">
+    <div class="chips" id="filter-chips" role="list">
+      <!-- Built by filters.js after data loads -->
+    </div>
+  </nav>
+
+  <!-- ── Upload drop zone (shown before data loads) ── -->
+  <div id="drop-zone" class="drop-zone" role="region" aria-label="Load delivery report">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.xlsm"
+           class="file-input-hidden" aria-label="Choose Excel file">
+    <div class="drop-zone-inner" id="drop-zone-inner">
+      <div class="drop-zone-icon" aria-hidden="true">📦</div>
+      <div class="drop-zone-title">Load Delivery Report</div>
+      <div class="drop-zone-sub">Drag & drop or tap to choose an Excel file</div>
+      <button class="drop-zone-btn" id="drop-zone-btn" type="button">
+        Choose File
+      </button>
+      <div id="sp-btn-wrap" style="display:none">
+        <button class="drop-zone-btn drop-zone-btn--sp" id="sp-btn" type="button">
+          Load from SharePoint
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Calendar view (shown after data loads) ── -->
+  <main id="calendar-view" class="calendar-view" hidden>
+
+    <!-- Calendar header -->
+    <div class="cal-header">
+      <button class="cal-nav-btn" id="cal-prev" aria-label="Previous month">‹</button>
+      <div class="cal-title" id="cal-title">May 2026</div>
+      <button class="cal-nav-btn" id="cal-next" aria-label="Next month">›</button>
+    </div>
+
+    <!-- Day of week headers — Mon-Fri only -->
+    <div class="cal-dow" aria-hidden="true">
+      <span>MON</span>
+      <span>TUE</span>
+      <span>WED</span>
+      <span>THU</span>
+      <span>FRI</span>
+    </div>
+
+    <!-- Calendar grid — populated by calendar.js -->
+    <div class="cal-grid" id="cal-grid" role="grid" aria-label="Delivery calendar"></div>
+
+    <!-- Divider -->
+    <div class="split-divider" aria-hidden="true"></div>
+
+    <!-- Day detail panel -->
+    <section class="day-panel" aria-label="Day detail">
+      <div class="day-panel-hdr">
+        <div class="day-panel-date" id="panel-date">Select a day</div>
+        <div id="panel-meta" class="day-panel-meta">
+          <span class="panel-count" id="panel-count"></span>
+          <span class="panel-next-badge" id="panel-next-badge" hidden>↳ next delivery</span>
+        </div>
+      </div>
+      <div class="day-panel-list" id="panel-list" role="list">
+        <!-- Populated by calendar.js -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Bottom navigation ── -->
+  <nav class="bottom-nav" aria-label="App navigation">
+    <button class="nav-tab nav-tab--active" data-tab="calendar"
+            aria-label="Calendar view" aria-current="page">
+      <span class="nav-icon" aria-hidden="true">📅</span>
+      <span class="nav-label">Viewer</span>
+    </button>
+    <button class="nav-tab" data-tab="remedials"
+            aria-label="Raise remedial" aria-current="false">
+      <span class="nav-icon" aria-hidden="true">⚠</span>
+      <span class="nav-label">Remedial</span>
+    </button>
+    <button class="nav-tab" data-tab="alerts"
+            aria-label="Alerts" aria-current="false">
+      <span class="nav-icon" aria-hidden="true">🔔</span>
+      <span class="nav-label">Alerts</span>
+    </button>
+  </nav>
+
+</div><!-- /#app -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SCRIPTS
+     Load order matters:
+       1. SheetJS (CDN) — needed by api.js
+       2. parser.js — pure functions, no deps
+       3. api.js — uses XLSX global from SheetJS
+       4. app.js — uses parseDeliveries, buildIndexes, filterDeliveries
+                    uses loadFromFile, loadFromSharePoint, loadCMLookup
+       5. calendar.js — uses app getters and subscribe
+       6. filters.js  — uses app getters and subscribe
+       7. Bootstrap   — wires everything together
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<!-- SheetJS from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- App scripts -->
+<script src="js/parser.js"></script>
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/calendar.js"></script>
+<script src="js/filters.js"></script>
+
+<!-- Bootstrap -->
+<script>
+(function () {
+  'use strict';
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const elApp         = document.getElementById('app');
+  const elDropZone    = document.getElementById('drop-zone');
+  const elCalView     = document.getElementById('calendar-view');
+  const elFileInput   = document.getElementById('file-input');
+  const elDropBtn     = document.getElementById('drop-zone-btn');
+  const elSpBtn       = document.getElementById('sp-btn');
+  const elSpBtnWrap   = document.getElementById('sp-btn-wrap');
+  const elDropInner   = document.getElementById('drop-zone-inner');
+  const elToolbarFile = document.getElementById('toolbar-file');
+  const elToolbarCM   = document.getElementById('toolbar-cm-btn');
+  const elLoadOverlay = document.getElementById('load-overlay');
+  const elLoadText    = document.getElementById('load-text');
+  const elErrorBanner = document.getElementById('error-banner');
+  const elErrorText   = document.getElementById('error-text');
+  const elErrorDismiss= document.getElementById('error-dismiss');
+  const elQualBanner  = document.getElementById('quality-banner');
+  const elQualText    = document.getElementById('quality-text');
+  const elQualDismiss = document.getElementById('quality-dismiss');
+  const elWhoOverlay  = document.getElementById('who-overlay');
+  const elWhoList     = document.getElementById('who-list');
+
+  // ── Subscribe to app state ────────────────────────────────────────────────
+  subscribe(onStateChange);
+
+  // ── Initialise ────────────────────────────────────────────────────────────
+  async function boot() {
+    // Show SharePoint button only if N8N is configured
+    if (isSharePointConfigured()) {
+      elSpBtnWrap.style.display = '';
+    }
+
+    // Init app — loads CM lookup, restores saved CM
+    await init();
+
+    // Show who-are-you picker if no CM saved
+    if (needsCMPicker()) {
+      showWhoPicker();
+    }
+  }
+
+  // ── State change handler ──────────────────────────────────────────────────
+  function onStateChange(state) {
+    // Loading overlay
+    if (state.loading) {
+      elLoadText.textContent = 'Parsing report…';
+      elLoadOverlay.removeAttribute('hidden');
+      return;
+    }
+    elLoadOverlay.setAttribute('hidden', '');
+
+    // Error banner
+    if (state.error) {
+      elErrorText.textContent = state.error;
+      elErrorBanner.removeAttribute('hidden');
+    } else {
+      elErrorBanner.setAttribute('hidden', '');
+    }
+
+    // Quality notices
+    if (state.summary?.qualityNotices?.length > 0) {
+      const notice = state.summary.qualityNotices[0];
+      elQualText.textContent = `${notice.title} — ${notice.body}`;
+      elQualBanner.removeAttribute('hidden');
+    }
+
+    // Switch between drop zone and calendar
+    if (state.ready) {
+      elDropZone.setAttribute('hidden', '');
+      elCalView.removeAttribute('hidden');
+
+      // Update toolbar
+      elToolbarFile.textContent = state.filename ?? '';
+      elToolbarCM.textContent   = getActiveCMName();
+
+      // Init calendar and filters on first load
+      if (!window._calInit) {
+        window._calInit = true;
+        initCalendar();
+        initFilters();
+      }
+    } else {
+      elDropZone.removeAttribute('hidden');
+      elCalView.setAttribute('hidden', '');
+    }
+  }
+
+  // ── Who are you picker ────────────────────────────────────────────────────
+  function showWhoPicker() {
+    const cms = getPickerCMs();
+    elWhoList.innerHTML = cms.map(({ code, name }) => `
+      <button type="button" class="who-btn" data-code="${_esc(code)}">
+        ${_esc(name)}
+      </button>
+    `).join('');
+
+    elWhoList.querySelectorAll('.who-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setCM(btn.dataset.code);
+        elWhoOverlay.setAttribute('hidden', '');
+        // If data already loaded — filters update via subscribe
+        // If not loaded yet — CM is saved and applied when file loads
+      });
+    });
+
+    elWhoOverlay.removeAttribute('hidden');
+  }
+
+  // Toolbar CM button — re-shows who picker
+  elToolbarCM.addEventListener('click', () => {
+    showWhoPicker();
+  });
+
+  // ── File upload — button tap ───────────────────────────────────────────────
+  elDropBtn.addEventListener('click', () => elFileInput.click());
+  elFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    elFileInput.value = ''; // reset so same file can be re-loaded
+    await load(file);
+  });
+
+  // ── SharePoint button ─────────────────────────────────────────────────────
+  elSpBtn?.addEventListener('click', () => loadSharePoint());
+
+  // ── Drag and drop ─────────────────────────────────────────────────────────
+  elDropInner.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    elDropInner.classList.add('drag-over');
+  });
+  elDropInner.addEventListener('dragleave', () => {
+    elDropInner.classList.remove('drag-over');
+  });
+  elDropInner.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    elDropInner.classList.remove('drag-over');
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+    await load(file);
+  });
+
+  // ── Error dismiss ─────────────────────────────────────────────────────────
+  elErrorDismiss.addEventListener('click', () => {
+    elErrorBanner.setAttribute('hidden', '');
+  });
+
+  elQualDismiss.addEventListener('click', () => {
+    elQualBanner.setAttribute('hidden', '');
+  });
+
+  // ── Bottom navigation ─────────────────────────────────────────────────────
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(t => {
+        t.classList.remove('nav-tab--active');
+        t.setAttribute('aria-current', 'false');
+      });
+      tab.classList.add('nav-tab--active');
+      tab.setAttribute('aria-current', 'page');
+      // Future: switch active view based on tab.dataset.tab
+    });
+  });
+
+  // ── Escape key closes overlays ────────────────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (!elWhoOverlay.hidden && !needsCMPicker()) {
+        elWhoOverlay.setAttribute('hidden', '');
+      }
+    }
+  });
+
+  // ── Utility ───────────────────────────────────────────────────────────────
+  function _esc(str) {
+    return String(str ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  // ── Service worker registration ───────────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('[SW] Registered:', reg.scope);
+          // When a new SW is waiting — activate it on next reload
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker?.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('[SW] Update available — will activate on next load');
+              }
+            });
+          });
+        })
+        .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  boot();
+
+})();
+</script>
+
+</body>
+</html>
